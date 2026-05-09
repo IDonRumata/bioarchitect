@@ -1,0 +1,46 @@
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace
+      - id: end-of-file-fixer
+      - id: check-yaml
+      - id: check-toml
+      - id: check-merge-conflict
+      - id: check-added-large-files
+        args: ["--maxkb=500"]
+      - id: detect-private-key
+      - id: mixed-line-ending
+        args: ["--fix=lf"]
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.8.0
+    hooks:
+      - id: ruff
+        args: [--fix]
+      - id: ruff-format
+
+  - repo: https://github.com/pre-commit/mirrors-mypy
+    rev: v1.13.0
+    hooks:
+      - id: mypy
+        additional_dependencies:
+          - pydantic>=2.10.0
+          - sqlalchemy>=2.0.36
+          - types-pytz
+        args: [--config-file=pyproject.toml]
+        exclude: ^(tests/|alembic/versions/|src/miniapp/)
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.21.2
+    hooks:
+      - id: gitleaks
+
+  # Локальный hook: проверяем, что Censor Agent не отключён в коде
+  - repo: local
+    hooks:
+      - id: no-censor-bypass
+        name: Censor Agent must never be disabled in code
+        entry: bash -c 'if grep -rE "(censor.*=.*[Ff]alse|skip.*censor|bypass.*censor)" src/ --include="*.py" --exclude-dir=__pycache__; then echo "❌ Found code that disables Censor Agent. This is forbidden."; exit 1; fi'
+        language: system
+        pass_filenames: false

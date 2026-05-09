@@ -1,0 +1,128 @@
+# BioArchitect — локальная разработка
+# Запуск: make dev
+#
+# Сервисы:
+#   postgres  — БД с pgvector
+#   redis     — кэш + очереди
+#   bot       — aiogram (long polling в dev)
+#   api       — FastAPI (HTTP API + webhooks)
+#   worker    — ARQ background tasks
+
+services:
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: bioarchitect-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-bioarchitect}
+      POSTGRES_USER: ${POSTGRES_USER:-bioarchitect}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-change_me_locally}
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./infra/postgres/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bioarchitect} -d ${POSTGRES_DB:-bioarchitect}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - bioarchitect-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: bioarchitect-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "512mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - bioarchitect-net
+
+  bot:
+    build:
+      context: .
+      target: dev
+    container_name: bioarchitect-bot
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-bioarchitect}:${POSTGRES_PASSWORD:-change_me_locally}@postgres:5432/${POSTGRES_DB:-bioarchitect}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src:ro
+      - ./alembic:/app/alembic:ro
+      - ./locale:/app/locale:ro
+    command: ["python", "-m", "src.bot.main"]
+    networks:
+      - bioarchitect-net
+
+  api:
+    build:
+      context: .
+      target: dev
+    container_name: bioarchitect-api
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-bioarchitect}:${POSTGRES_PASSWORD:-change_me_locally}@postgres:5432/${POSTGRES_DB:-bioarchitect}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+      - "9090:9090"
+    volumes:
+      - ./src:/app/src:ro
+    command: ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+    networks:
+      - bioarchitect-net
+
+  worker:
+    build:
+      context: .
+      target: dev
+    container_name: bioarchitect-worker
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-bioarchitect}:${POSTGRES_PASSWORD:-change_me_locally}@postgres:5432/${POSTGRES_DB:-bioarchitect}
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    volumes:
+      - ./src:/app/src:ro
+    command: ["arq", "src.workers.main.WorkerSettings"]
+    networks:
+      - bioarchitect-net
+
+volumes:
+  postgres_data:
+    name: bioarchitect_postgres_data
+  redis_data:
+    name: bioarchitect_redis_data
+
+networks:
+  bioarchitect-net:
+    name: bioarchitect-net
+    driver: bridge

@@ -1,0 +1,15 @@
+# sops: правила шифрования секретов через age.
+# Реальные age-ключи — у владельца локально и в GitHub Actions secrets.
+# См. ADR-0003.
+
+creation_rules:
+  - path_regex: \.env\.encrypted$
+    encrypted_regex: "^(.*_KEY|.*_TOKEN|.*_SECRET|.*_PASSWORD|.*_DSN)$"
+    age:
+      # Замени на реальный публичный ключ владельца после `age-keygen -o key.txt`
+      # Пример: age1qx2z9w3yz...
+      - PLACEHOLDER_AGE_PUBLIC_KEY
+
+  - path_regex: secrets/.*
+    age:
+      - PLACEHOLDER_AGE_PUBLIC_KEY

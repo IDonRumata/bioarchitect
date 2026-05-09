@@ -1,0 +1,178 @@
+[project]
+name = "bioarchitect"
+version = "0.1.0"
+description = "AI Wellness Companion for Drivers & Shift Workers"
+readme = "README.md"
+requires-python = ">=3.12,<3.13"
+license = { text = "Proprietary" }
+authors = [{ name = "BioArchitect", email = "noreply@bioarchitect.app" }]
+
+dependencies = [
+    # Telegram bot
+    "aiogram>=3.13.0,<4.0.0",
+    # HTTP API
+    "fastapi>=0.115.0,<1.0.0",
+    "uvicorn[standard]>=0.32.0",
+    # Database
+    "sqlalchemy[asyncio]>=2.0.36",
+    "alembic>=1.14.0",
+    "asyncpg>=0.30.0",
+    "pgvector>=0.3.6",
+    # Cache + queues
+    "redis>=5.2.0",
+    "arq>=0.26.3",
+    # Validation / settings
+    "pydantic>=2.10.0",
+    "pydantic-settings>=2.6.0",
+    # Anthropic SDK (only LLM provider in this project)
+    "anthropic>=0.40.0",
+    # HTTP client
+    "httpx>=0.28.0",
+    # Logging
+    "structlog>=24.4.0",
+    # Image processing for pHash
+    "pillow>=11.0.0",
+    "imagehash>=4.3.1",
+    # i18n
+    "babel>=2.16.0",
+    # Observability
+    "sentry-sdk[fastapi]>=2.18.0",
+    "prometheus-client>=0.21.0",
+    # Time / timezones
+    "pytz>=2024.2",
+    # Cryptography (encrypted lab photo storage)
+    "cryptography>=43.0.0",
+    # Backblaze B2 client
+    "b2sdk>=2.6.0",
+    # Payment providers (lazy-imported in billing/)
+    "stripe>=11.3.0",
+    # PDF parsing for chain menu pipeline (sprint 8+)
+    "pdfplumber>=0.11.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=6.0.0",
+    "pytest-mock>=3.14.0",
+    "respx>=0.21.1",
+    "freezegun>=1.5.0",
+    "mypy>=1.13.0",
+    "ruff>=0.8.0",
+    "pre-commit>=4.0.0",
+    "types-pytz",
+    "types-pillow",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+# ---- Ruff ----
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+extend-exclude = [
+    "alembic/versions",
+    "src/miniapp/node_modules",
+    "src/miniapp/dist",
+]
+
+[tool.ruff.lint]
+select = [
+    "E",    # pycodestyle errors
+    "W",    # pycodestyle warnings
+    "F",    # pyflakes
+    "I",    # isort
+    "B",    # bugbear
+    "C4",   # comprehensions
+    "UP",   # pyupgrade
+    "N",    # pep8-naming
+    "S",    # bandit
+    "A",    # builtins shadowing
+    "ASYNC", # async best practices
+    "RET",  # return statements
+    "SIM",  # simplify
+    "TCH",  # type-checking imports
+    "RUF",  # ruff-specific
+]
+ignore = [
+    "S101",   # assert ok in tests
+    "B008",   # function-call-in-argument-default (FastAPI Depends)
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S", "ASYNC"]
+"alembic/**" = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+# ---- Mypy ----
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+disallow_untyped_decorators = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_no_return = true
+warn_unreachable = true
+strict_equality = true
+plugins = ["pydantic.mypy"]
+exclude = ["alembic/versions/", "src/miniapp/", "tests/"]
+
+[[tool.mypy.overrides]]
+module = ["imagehash.*", "b2sdk.*", "pdfplumber.*"]
+ignore_missing_imports = true
+
+[tool.pydantic-mypy]
+init_forbid_extra = true
+init_typed = true
+warn_required_dynamic_aliases = true
+
+# ---- Pytest ----
+[tool.pytest.ini_options]
+minversion = "8.0"
+testpaths = ["tests"]
+asyncio_mode = "auto"
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+]
+markers = [
+    "unit: unit tests (fast, no I/O)",
+    "integration: integration tests (require Docker)",
+    "censor_eval: Censor Agent eval suite (CI gate)",
+    "slow: tests that take > 1s",
+]
+filterwarnings = [
+    "error",
+    "ignore::DeprecationWarning:pydantic.*",
+]
+
+# ---- Coverage ----
+[tool.coverage.run]
+branch = true
+source = ["src"]
+omit = ["src/miniapp/*", "alembic/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+    "if __name__ == .__main__.:",
+]
+show_missing = true
+skip_covered = false

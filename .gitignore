@@ -1,0 +1,85 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+dist/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Virtual envs
+.venv/
+venv/
+env/
+
+# Secrets — NEVER commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets/
+.sops.yaml.local
+
+# Doppler / sops
+.doppler.yaml.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Local data
+data/
+*.db
+*.sqlite
+*.sqlite3
+postgres_data/
+redis_data/
+backblaze_local/
+
+# Logs
+logs/
+*.log
+
+# Node / frontend
+node_modules/
+src/miniapp/dist/
+src/miniapp/.next/
+src/miniapp/build/
+src/miniapp/.vite/
+
+# Capacitor
+android/
+ios/
+src/miniapp/android/
+src/miniapp/ios/
+
+# Test artifacts
+.pytest_cache/
+test-results/
+htmlcov/
+coverage.xml
+
+# AI / LLM artifacts
+.anthropic/
+prompt_cache/
+
+# Backups
+backups/
+*.dump
+*.tar.gz
