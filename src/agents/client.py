@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 from dataclasses import dataclass
 from time import monotonic
 
@@ -208,6 +209,141 @@ class ClaudeClient:
         log.info(
             "client.call_text",
             model=chosen_model,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cache_read=cache_read,
+            cache_creation=cache_creation,
+            cost_cents=cost_cents,
+            latency_ms=latency_ms,
+        )
+
+        return LLMCallResult(
+            text=text,
+            model=chosen_model,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cache_read_tokens=cache_read,
+            cache_creation_tokens=cache_creation,
+            cost_cents=cost_cents,
+            latency_ms=latency_ms,
+        )
+
+    async def call_vision(
+        self,
+        *,
+        system: str,
+        image_bytes: bytes,
+        prompt: str,
+        media_type: str = "image/jpeg",
+        model: str | None = None,
+        max_tokens: int = 1024,
+        temperature: float = 0.0,
+        cache_system: bool = True,
+        max_retries: int = 3,
+    ) -> LLMCallResult:
+        """Vision вызов Claude Sonnet с изображением.
+
+        Изображение передаётся как base64-encoded блок в user message.
+        Системный промпт кэшируется (``cache_control: ephemeral``) как в
+        ``call_text``.
+
+        Args:
+            system: Системный промпт (кэшируется).
+            image_bytes: Raw bytes фото (JPEG/PNG/GIF/WEBP).
+            prompt: Текстовый запрос пользователя рядом с фото.
+            media_type: MIME-тип изображения (по умолчанию image/jpeg).
+            model: ID модели. По умолчанию — sonnet (Vision).
+            max_retries: ретраи на 429 / 5xx.
+
+        Raises:
+            anthropic.APIError: после исчерпания ретраев.
+        """
+        chosen_model = model or self._sonnet
+        use_cache = cache_system and self._cache_enabled and bool(system)
+
+        system_blocks: list[dict[str, object]] | str
+        if use_cache:
+            system_blocks = [
+                {
+                    "type": "text",
+                    "text": system,
+                    "cache_control": {"type": "ephemeral"},
+                }
+            ]
+        else:
+            system_blocks = system
+
+        image_b64 = base64.standard_b64encode(image_bytes).decode()
+        user_content: list[dict[str, object]] = [
+            {
+                "type": "image",
+                "source": {
+                    "type": "base64",
+                    "media_type": media_type,
+                    "data": image_b64,
+                },
+            },
+            {"type": "text", "text": prompt},
+        ]
+
+        attempt = 0
+        last_exc: Exception | None = None
+        started = monotonic()
+
+        while attempt <= max_retries:
+            try:
+                response = await self._client.messages.create(
+                    model=chosen_model,
+                    max_tokens=max_tokens,
+                    temperature=temperature,
+                    system=system_blocks,  # type: ignore[arg-type]
+                    messages=[{"role": "user", "content": user_content}],
+                )
+                break
+            except (RateLimitError, APIStatusError) as exc:
+                last_exc = exc
+                status = getattr(exc, "status_code", None)
+                if isinstance(exc, APIStatusError) and status is not None and 400 <= status < 500 and status != 429:
+                    raise
+                if attempt == max_retries:
+                    raise
+                delay = 2**attempt
+                log.warning(
+                    "client.vision_retry",
+                    attempt=attempt + 1,
+                    delay_s=delay,
+                    error=str(exc),
+                )
+                await asyncio.sleep(delay)
+                attempt += 1
+        else:
+            assert last_exc is not None
+            raise last_exc
+
+        latency_ms = int((monotonic() - started) * 1000)
+
+        text_parts: list[str] = []
+        for block in response.content:
+            if isinstance(block, anthropic.types.TextBlock):
+                text_parts.append(block.text)
+        text = "".join(text_parts)
+
+        usage = response.usage
+        cache_read = getattr(usage, "cache_read_input_tokens", 0) or 0
+        cache_creation = getattr(usage, "cache_creation_input_tokens", 0) or 0
+
+        cost_cents = _compute_cost_cents(
+            model=chosen_model,
+            input_tokens=usage.input_tokens,
+            output_tokens=usage.output_tokens,
+            cache_read_tokens=cache_read,
+            cache_creation_tokens=cache_creation,
+        )
+
+        log.info(
+            "client.call_vision",
+            model=chosen_model,
+            image_bytes=len(image_bytes),
             input_tokens=usage.input_tokens,
             output_tokens=usage.output_tokens,
             cache_read=cache_read,

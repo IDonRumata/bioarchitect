@@ -6,7 +6,7 @@
 
 ## Текущий статус (2026-05-10)
 
-**Спринт:** 3 — модуль питания — **завершён**.
+**Спринт:** 4 — Vision Phase 1 — **завершён**.
 
 **Завершено:**
 - Спринт 0 — каркас монорепозитория, 114 файлов, 5 ADR, шаблон DPA.
@@ -14,8 +14,9 @@
 - Спринт 2 — главное меню (ReplyKeyboardMarkup), хендлеры `/profile` (read-only сводка), `/settings` (переключатель языка), `/delete` (soft-delete с подтверждением + кнопка undo в течение grace period), ARQ-воркер `data_deletion_processor` (cron 03:00 UTC, hard-delete по истечении 30 дней с CASCADE), интеграционные тесты сервисного слоя против реального Postgres (4 кейса в `tests/integration/`), CI расширен на интеграционные тесты.
 - **Локальный стек проверен и работает** (2026-05-10): Docker Desktop установлен, `docker compose up -d` поднимает все 5 сервисов, миграция применена, онбординг FSM пройден до конца в Telegram.
 - Спринт 3 — модуль питания: модели `food_items` / `food_aliases` / `food_logs` (partitioned by month, append-only через PL/pgSQL trigger, snapshot нутриентов), миграция с `pg_trgm` extension и GIN trgm-индексами для fuzzy-поиска на 4 языках; сидинг `manual_foods` (топ-30 базовых продуктов с RU/EN/PL/DE алиасами), USDA FoodData Central API loader (опционально, требует USDA_FDC_API_KEY), Open Food Facts API loader для брендовых продуктов; `ClaudeClient.call_text` с prompt caching (cache_control: ephemeral) и retry на 429/5xx; nutrition parser (Haiku 4.5) с системным промптом `<json>...</json>`-формата; `Orchestrator` с детерминированным regex-классификатором (число+единица → 0.95, leading number → 0.92, глагол → 0.7); bot handler `/log` с FSM `choosing_match` и inline-кнопками выбора кандидата; интеграционный тест-suite через alembic upgrade (а не create_all) — 9 кейсов на pg_trgm fuzzy, snapshot нутриентов, partition routing, immutability trigger, daily_totals.
+- Спринт 4 — Vision Phase 1: модель `photo_recognitions` (pHash, items_json, photo_kept=false — GDPR); миграция `20260510_1600`; `ClaudeClient.call_vision` (base64 image, Sonnet 4.6, cache_system, retry); системный промпт `src/agents/prompts/vision_phase1.md` (multilingual, weight estimation rules, chain brand detection, `<json>...</json>` output); `VisionParser.recognize` с pHash-кэшем (точное совпадение → быстрый SQL, приближённое ≤5 Хэмминг → Python-цикл по last 100); `VisionStates.confirming_item` + `entering_grams` FSM; `src/bot/handlers/vision.py` с очередью распознанных продуктов → подтверждение / ввод граммов / пропуск → NutritionService.search → log_food(method=PHOTO_PHASE1); 15 unit-тестов + 4 интеграционных (3 passed, 1 skipped). Итого: **71 passed, 1 skipped**.
 
-**Следующий шаг:** Спринт 4 — Vision Phase 1 (распознавание еды по фото через Claude Sonnet Vision) + pHash-кэш повторных фото.
+**Следующий шаг:** Спринт 5 — Vision Phase 2 (chain DB + visual weight range), кнопки ±10г, daily check-in, Recovery Index.
 
 ---
 
@@ -69,6 +70,10 @@
 | 2026-05-10 | Censor НЕ применяется к Orchestrator и nutrition_parser. Censor — только на Coach/RAG ответах. | CLAUDE.md §3.2: nutrition-парсинг не health-advice; защита Censor не нужна на детерминированных задачах |
 | 2026-05-10 | Auto-log threshold = `similarity >= 0.85`. Иначе показываем top-3 inline-кнопок. | Эмпирический порог: точные совпадения «куриная грудка»/«грудка курицы» дают ≥0.62, «помидоры» с опечаткой даёт ~0.5; 0.85 минимизирует ложные авто-логи |
 | 2026-05-10 | Интеграционные тесты используют **alembic upgrade head** (subprocess), не `Base.metadata.create_all`. | Без миграций нет partitioned table, pg_trgm extension, и PL/pgSQL trigger |
+| 2026-05-10 | Фото НЕ хранится — только `phash` (16-hex, 64-bit imagehash) + `items_json` в `photo_recognitions`. `photo_kept = false` всегда. | GDPR Art. 5(1)(c) Data Minimisation — хранить само фото еды нет правового основания |
+| 2026-05-10 | Vision output: `<json>...</json>` тег как в nutrition parser, не tool_use. | Tool_use дороже по токенам + не нужен для структурированного JSON с 5–6 полями |
+| 2026-05-10 | pHash cache: точное совпадение → SQL lookup; ≤5 Хэмминг → Python-цикл по last 100 записям за 30 дней. | Без pg extension для bit-distance точный lookup бесплатен; 100 записей пользователя за 30 дней — реалистичный максимум |
+| 2026-05-10 | Vision log threshold = `similarity >= 0.5` (мягче 0.85 текстового). | Vision уже нормализует name_ru через Sonnet; нет смысла поднимать планку — лучше логировать «приближённо» и дать пользователю исправить |
 
 ## 3. Блокеры и open questions
 
@@ -105,8 +110,8 @@
 | 1 | 1–2 | Docker Compose, Postgres, Alembic, FSM-онбординг 8 шагов (GDPR + 5 этапов), таблицы users/profiles/consents | ✅ done |
 | 2 | 3–4 | главное меню, `/profile`, `/settings`, soft-delete + ARQ hard-delete воркер, integration tests | ✅ done |
 | 3 | 5–6 | Сидинг USDA + Open Food Facts, ручной ввод (Haiku 4.5) через Orchestrator, pg_trgm fuzzy search | ✅ done |
-| 4 | 7–8 | Vision Phase 1 (распознавание + редактирование), pHash-кэш | ⏭️ next |
-| 5 | 9–10 | Vision Phase 2 (chain DB + visual range), кнопки ±10г, daily check-in, Recovery Index | ⏳ |
+| 4 | 7–8 | Vision Phase 1 (распознавание + редактирование), pHash-кэш | ✅ done |
+| 5 | 9–10 | Vision Phase 2 (chain DB + visual range), кнопки ±10г, daily check-in, Recovery Index | ⏭️ next |
 | 6 | 11–12 | IF-трекер, Coach Agent | ⏳ |
 | 7 | 13–14 | Censor Agent + eval suite, Stripe + Telegram Stars, paywall | ⏳ |
 | 8 | 15–16 | RAG Agent + 30 статей, база заправок (топ-30 EU/СНГ) | ⏳ |

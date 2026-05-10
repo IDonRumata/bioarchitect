@@ -22,12 +22,14 @@ from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     Float,
     ForeignKey,
     Index,
     String,
+    Text,
     UniqueConstraint,
     text,
 )
@@ -227,3 +229,50 @@ class FoodLog(Base):
             f"<FoodLog user={self.user_id} item={self.food_item_id} "
             f"{self.grams}g at {self.logged_at}>"
         )
+
+
+class PhotoRecognition(Base, UUIDPrimaryKeyMixin, TimestampMixin):
+    """Результат распознавания фото едой (Vision Phase 1).
+
+    Фото НЕ хранится (``photo_kept = false`` всегда) — GDPR Art. 5(1)(c).
+    Хранится только pHash (64-bit perceptual hash) для кэша повторных фото
+    + распознанные продукты в JSON. Кэш проверяется по расстоянию Хэмминга ≤ 5
+    в пределах 30 дней.
+    """
+
+    __tablename__ = "photo_recognitions"
+
+    user_id: Mapped[UUID] = mapped_column(
+        PG_UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # 64-bit pHash в hex (16 символов). Нужен для cache hit.
+    phash: Mapped[str] = mapped_column(String(16), nullable=False)
+    # JSON-массив RecognizedItem (dumps из vision_phase1.py).
+    items_json: Mapped[str] = mapped_column(Text, nullable=False)
+    # Среднее confidence по всем распознанным продуктам.
+    overall_confidence: Mapped[float] = mapped_column(Float, nullable=False)
+    # Стоимость вызова Vision API в центах.
+    cost_cents: Mapped[float] = mapped_column(Float, nullable=False, server_default=text("0"))
+    # Модель (всегда claude-sonnet-4-6 в Phase 1).
+    llm_model: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Фото не хранится. Поле зарезервировано для явного контроля.
+    photo_kept: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default=text("false"),
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "overall_confidence >= 0.0 AND overall_confidence <= 1.0",
+            name="ck_photo_recognitions_confidence",
+        ),
+        # Составной индекс для поиска кэша: (user_id, phash) + created_at фильтр.
+        Index("ix_photo_recognitions_user_phash", "user_id", "phash"),
+        Index("ix_photo_recognitions_user_created", "user_id", "created_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<PhotoRecognition user={self.user_id} phash={self.phash}>"

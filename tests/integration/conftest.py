@@ -36,7 +36,7 @@ from sqlalchemy.ext.asyncio import (
 # Импортируем все модели — нужно для типизации в тестах. Сама схема
 # поднимается через alembic, не через metadata.create_all.
 import src.domains.consent.models  # noqa: F401
-import src.domains.nutrition.models  # noqa: F401
+import src.domains.nutrition.models  # noqa: F401  (includes PhotoRecognition)
 import src.domains.users.models  # noqa: F401
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -102,7 +102,8 @@ def _migrated_database() -> str:
 # Список таблиц для TRUNCATE между тестами. Расширять при добавлении
 # новых доменов с мутируемыми таблицами.
 _TRUNCATE_TABLES = (
-    "food_logs",        # CASCADE снесёт при users; явно перечисляем для idempotency
+    "food_logs",             # CASCADE снесёт при users; явно перечисляем для idempotency
+    "photo_recognitions",    # Vision Phase 1 cache
     "food_aliases",
     "food_items",
     "consent_records",
