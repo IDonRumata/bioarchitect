@@ -6,6 +6,8 @@ import pytest
 
 from src.agents.orchestrator import IntentType, Orchestrator
 
+pytestmark = pytest.mark.unit
+
 
 @pytest.fixture
 def orch() -> Orchestrator:

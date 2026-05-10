@@ -6,15 +6,16 @@
 
 ## Текущий статус (2026-05-10)
 
-**Спринт:** 3 — модуль питания — **следующий**.
+**Спринт:** 3 — модуль питания — **завершён**.
 
 **Завершено:**
 - Спринт 0 — каркас монорепозитория, 114 файлов, 5 ADR, шаблон DPA.
 - Спринт 1 — модели `users` / `user_profiles` / `consent_records` + первая миграция Alembic, репозитории + сервисы (`UserService`, `ConsentService`), `DBSessionMiddleware` + `I18nMiddleware`, FSM-онбординг 8 шагов (GDPR Art. 9 → 5 этапов из ТЗ §5.1), unit-тесты Pydantic-валидации.
 - Спринт 2 — главное меню (ReplyKeyboardMarkup), хендлеры `/profile` (read-only сводка), `/settings` (переключатель языка), `/delete` (soft-delete с подтверждением + кнопка undo в течение grace period), ARQ-воркер `data_deletion_processor` (cron 03:00 UTC, hard-delete по истечении 30 дней с CASCADE), интеграционные тесты сервисного слоя против реального Postgres (4 кейса в `tests/integration/`), CI расширен на интеграционные тесты.
 - **Локальный стек проверен и работает** (2026-05-10): Docker Desktop установлен, `docker compose up -d` поднимает все 5 сервисов, миграция применена, онбординг FSM пройден до конца в Telegram.
+- Спринт 3 — модуль питания: модели `food_items` / `food_aliases` / `food_logs` (partitioned by month, append-only через PL/pgSQL trigger, snapshot нутриентов), миграция с `pg_trgm` extension и GIN trgm-индексами для fuzzy-поиска на 4 языках; сидинг `manual_foods` (топ-30 базовых продуктов с RU/EN/PL/DE алиасами), USDA FoodData Central API loader (опционально, требует USDA_FDC_API_KEY), Open Food Facts API loader для брендовых продуктов; `ClaudeClient.call_text` с prompt caching (cache_control: ephemeral) и retry на 429/5xx; nutrition parser (Haiku 4.5) с системным промптом `<json>...</json>`-формата; `Orchestrator` с детерминированным regex-классификатором (число+единица → 0.95, leading number → 0.92, глагол → 0.7); bot handler `/log` с FSM `choosing_match` и inline-кнопками выбора кандидата; интеграционный тест-suite через alembic upgrade (а не create_all) — 9 кейсов на pg_trgm fuzzy, snapshot нутриентов, partition routing, immutability trigger, daily_totals.
 
-**Следующий шаг:** Спринт 3 — модуль питания: сидинг food_items из USDA + Open Food Facts, ручной ввод текстом «куриная грудка 200г» через Orchestrator (Haiku 4.5) + pg_trgm fuzzy search.
+**Следующий шаг:** Спринт 4 — Vision Phase 1 (распознавание еды по фото через Claude Sonnet Vision) + pHash-кэш повторных фото.
 
 ---
 
@@ -58,6 +59,16 @@
 | 2026-05-10 | Hard-delete пользователей — через CASCADE на FK (ON DELETE CASCADE стоит на user_profiles, consent_records и т.д.). ARQ-воркер делает `DELETE FROM users WHERE id IN (...)`. | Один источник правды (БД), нет ручной разборки таблиц в коде |
 | 2026-05-10 | Grace period конфигурируется через `GDPR_DELETION_GRACE_DAYS` в .env (по умолчанию 30). Для тестирования ставится 0. | гибкость для CI / staging |
 | 2026-05-10 | Интеграционные тесты идут через реальный Postgres (CI service container или локальный `make dev` БД). aiosqlite-fallback не используется — модели завязаны на postgres-специфику (UUID, ENUM, ARRAY). | Faithful tests > быстрые in-memory |
+| 2026-05-10 | `food_logs` — partitioned by RANGE (logged_at), 12 месячных партиций на 2026 + DEFAULT. Партиции 2027+ создаст ARQ-воркер ближе к делу. | Без партиционирования food_logs за год вахтовика разрастётся в десятки тысяч строк; партиции дают дешёвый retention drop по году |
+| 2026-05-10 | Immutability `food_logs` через PL/pgSQL trigger (`RAISE EXCEPTION` на UPDATE), не через REVOKE. DELETE разрешён для GDPR Art. 17 каскада. | Не зависит от роли БД, работает в dev и prod одинаково |
+| 2026-05-10 | Snapshot нутриентов в `food_logs.kcal/protein_g/...` на момент логирования. Изменения в `food_items` не переписывают историю. | Требование ТЗ §5: immutable health data + audit trail |
+| 2026-05-10 | Fuzzy-поиск через `pg_trgm` GIN-индексы на `lower(alias)` + мультиязычные `food_aliases` per-locale. Tsvector / морфологические словари не используем. | trgm устойчив к опечаткам и работает на 4 языках без словарей; кириллица + латиница из коробки |
+| 2026-05-10 | Базовый каталог из 30 продуктов (`scripts/lib/manual_foods.py`) с алиасами на RU/EN/PL/DE — обязательное основание. USDA + OFF подключаются как «расширение». | Без manual seed русский текст-ввод не сработает: USDA только en, OFF преимущественно бренды |
+| 2026-05-10 | Prompt caching обязателен на каждом системном промпте (`cache_control: ephemeral`). На Haiku 4.5 даёт ~10× экономию по cache_read токенам внутри 5-мин TTL. | CLAUDE.md §2.1 — фиксированное правило проекта |
+| 2026-05-10 | Nutrition parser — text-only Haiku вызов с `<json>...</json>`-блоком ответа. Структурный JSON не через tool_use. | Tool_use дороже (больше токенов на schema) и сложнее отлаживать; tag-based парсинг достаточен и устойчив |
+| 2026-05-10 | Censor НЕ применяется к Orchestrator и nutrition_parser. Censor — только на Coach/RAG ответах. | CLAUDE.md §3.2: nutrition-парсинг не health-advice; защита Censor не нужна на детерминированных задачах |
+| 2026-05-10 | Auto-log threshold = `similarity >= 0.85`. Иначе показываем top-3 inline-кнопок. | Эмпирический порог: точные совпадения «куриная грудка»/«грудка курицы» дают ≥0.62, «помидоры» с опечаткой даёт ~0.5; 0.85 минимизирует ложные авто-логи |
+| 2026-05-10 | Интеграционные тесты используют **alembic upgrade head** (subprocess), не `Base.metadata.create_all`. | Без миграций нет partitioned table, pg_trgm extension, и PL/pgSQL trigger |
 
 ## 3. Блокеры и open questions
 
@@ -82,6 +93,9 @@
 - **2026-05-10 — спринт 2.** Полный i18n-проход откладывается, см. таблицу решений. RU остаётся master-языком до подключения переводчиков. `LOCALE_LABELS` уже умеют все 4 языка, переключение в `/settings` сохраняется в БД, но влияет только на новые `_()`-обёрнутые сообщения (которые появятся в спринтах 6+).
 - **2026-05-10 — спринт 2.** Тестовая БД для интеграционных тестов = `bioarchitect_test`. CI создаёт её через service container с такими же кредами как dev. Локально нужно создать вручную: `docker compose exec postgres createdb -U bioarchitect bioarchitect_test`.
 - **2026-05-10 — локальный запуск.** Исправлены баги при первом запуске: (1) `SUPPORTED_LOCALES` в `.env` должен быть в JSON-формате `["ru","en","pl","de"]`; (2) `structlog.stdlib.add_logger_name` убран из процессоров (несовместим с `PrintLoggerFactory`); (3) все `DateTime()` колонки переведены на `DateTime(timezone=True)` — иначе asyncpg падал с "can't subtract offset-naive and offset-aware datetimes"; (4) `alembic.ini` добавлен в volumes бота в `docker-compose.yml`; (5) `README.md` добавлен в Dockerfile `dev` и `builder` стадии (hatchling требует его при сборке пакета).
+- **2026-05-10 — спринт 3.** Тестовая БД `bioarchitect_test` теперь поднимается через **alembic upgrade head** (subprocess) на `tests/integration/conftest.py`, а не через `Base.metadata.create_all`. Без этого partitioned `food_logs`, pg_trgm extension и PL/pgSQL trigger не разворачиваются. Per-test изоляция — через `TRUNCATE ... CASCADE` после каждого теста. Engine — function-scoped (session-scoped не работает с `asyncio_mode = "auto"` из pytest-asyncio 0.24+: разные тесты получают разные event loop'ы → `Event loop is closed` при close).
+- **2026-05-10 — спринт 3.** OFF API возвращает много мусорных записей (французские названия без RU/PL/DE-алиасов, `Fromage de France`-подобные). Поставили `verified=false` на всё что из OFF, чтобы не использовать в auto-log path (нужен `verified=true`). В спринте 4 добавим фильтр по длине алиаса и наличию минимального набора нутриентов.
+- **2026-05-10 — спринт 3.** Pending entries в FSM-state (выбор кандидата по кнопкам) сериализуются как dict с UUID-as-str. Если Redis-storage перезагрузится между сообщениями — state потеряется. Для MVP ок (Redis с appendonly=yes), при росте — переехать на DB-backed FSM.
 
 ## 5. Текущий план спринтов
 
@@ -90,9 +104,8 @@
 | 0 | — | Скаффолдинг репозитория | ✅ done |
 | 1 | 1–2 | Docker Compose, Postgres, Alembic, FSM-онбординг 8 шагов (GDPR + 5 этапов), таблицы users/profiles/consents | ✅ done |
 | 2 | 3–4 | главное меню, `/profile`, `/settings`, soft-delete + ARQ hard-delete воркер, integration tests | ✅ done |
-| 3 | 5–6 | Сидинг USDA + Open Food Facts, ручной ввод (Haiku 4.5) через Orchestrator, pg_trgm fuzzy search | ⏭️ next |
-| 3 | 5–6 | Сидинг USDA + Open Food Facts, ручной ввод (Haiku) | ⏳ |
-| 4 | 7–8 | Vision Phase 1 (распознавание + редактирование), pHash-кэш | ⏳ |
+| 3 | 5–6 | Сидинг USDA + Open Food Facts, ручной ввод (Haiku 4.5) через Orchestrator, pg_trgm fuzzy search | ✅ done |
+| 4 | 7–8 | Vision Phase 1 (распознавание + редактирование), pHash-кэш | ⏭️ next |
 | 5 | 9–10 | Vision Phase 2 (chain DB + visual range), кнопки ±10г, daily check-in, Recovery Index | ⏳ |
 | 6 | 11–12 | IF-трекер, Coach Agent | ⏳ |
 | 7 | 13–14 | Censor Agent + eval suite, Stripe + Telegram Stars, paywall | ⏳ |

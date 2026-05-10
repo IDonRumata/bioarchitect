@@ -9,6 +9,8 @@ import pytest
 
 from src.agents.nutrition_parser import NutritionParseError, _parse_entries
 
+pytestmark = pytest.mark.unit
+
 
 def test_parse_typical_response() -> None:
     raw = '<json>[{"query":"куриная грудка","grams":200},{"query":"рис","grams":150}]</json>'
