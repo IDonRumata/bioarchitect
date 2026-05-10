@@ -2,9 +2,10 @@
 
 from aiogram import Router
 
-from src.bot.handlers import start
+from src.bot.handlers import onboarding, start
 
 router = Router(name="main")
 router.include_router(start.router)
+router.include_router(onboarding.router)
 
 __all__ = ["router"]

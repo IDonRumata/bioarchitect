@@ -4,11 +4,22 @@
 
 ---
 
-## Текущий статус (2026-05-09)
+## Текущий статус (2026-05-10)
 
-**Спринт:** 0 (preparation / scaffolding).
-**Завершено:** Создан репозиторий, базовый каркас монорепозитория (Variant A из плана подготовки).
-**Следующий шаг:** Спринт 1 — `make dev` поднимает Postgres + Redis локально, аиограм skeleton принимает `/start`.
+**Спринт:** 1 (онбординг + GDPR-согласие) — **завершён**.
+
+**Завершено:**
+- Спринт 0 — каркас монорепозитория, 114 файлов, 5 ADR, шаблон DPA.
+- Спринт 1 — модели `users` / `user_profiles` / `consent_records` + первая миграция Alembic, репозитории + сервисы (`UserService`, `ConsentService`), `DBSessionMiddleware` + `I18nMiddleware`, FSM-онбординг 8 шагов (GDPR Art. 9 → 5 этапов из ТЗ §5.1), 4 `.po`-файла локалей (заглушки), unit-тесты Pydantic-валидации payload + версии согласий + smoke-импорт всех модулей.
+
+**Следующий шаг:** Спринт 2 — обёртка handler-строк в `_()` (gettext flow), главное меню, команда `/profile`, soft-delete handler, ARQ воркер `data_deletion_processor` для hard-delete после grace period 30 дней.
+
+**Перед стартом Спринта 2 нужно от Андрея:**
+1. Установить Docker Desktop + uv, склонировать репо, создать `.env` (см. `docs/setup/local-development.md`).
+2. Запустить `make dev` — убедиться что postgres + redis + bot + api поднимаются.
+3. Запустить `make migrate` — должна применится миграция `20260509_1200_initial_schema`.
+4. Открыть бота в Telegram → `/start` → пройти онбординг — убедиться что вся FSM работает end-to-end.
+5. Если всё ок — переходим в спринт 2.
 
 ---
 
@@ -45,10 +56,13 @@
 | 2026-05-09 | На старте production VPS — Zomro NL (если регион EU) или Hetzner DE | оба GDPR-compliant, выбор отложен до момента деплоя |
 | 2026-05-09 | Recovery Index формула — детерминированный код, **clamp компонентов в [0, max]** чтобы избежать отрицательных значений при экстремальных данных | защита от багов |
 | 2026-05-09 | Secrets: sops + age (не doppler, не .env в git) | бесплатно, audit trail в git, GDPR-friendly |
+| 2026-05-10 | `birth_year` вместо полной даты (GDPR Data Minimization). Минимум 18+ через CHECK constraint и валидацию FSM. | соответствует ТЗ §5.1 + Censor blocklist (н/л запрещены) |
+| 2026-05-10 | Pattern: append-only `consent_records`. Отзыв = новая строка `granted=false`. Никаких UPDATE. | GDPR audit trail требует полную историю |
+| 2026-05-10 | IP в `consent_records` хранится как sha256 хеш с солью, а не raw. | Data Minimization, но достаточно для proof-of-consent |
 
 ## 3. Блокеры и open questions
 
-- [ ] **DPA с Anthropic** — без него юридически нельзя обрабатывать health-данные EU-пользователей в продакшне. Шаблон email подготовлен в `docs/legal/dpa-request-template.md` (TODO).
+- [ ] **DPA с Anthropic** — без него юридически нельзя обрабатывать health-данные EU-пользователей в продакшне. Шаблон email готов в `docs/legal/dpa-request-template.md` — Андрею отправить с своей почты.
 - [ ] **Медэдвайзер** — без него блокированы:
   - Eval suite Censor Agent (80+ кейсов нужны до релиза монетизации, спринт 7-8).
   - Lab reference ranges (без подписи `verified_by` модуль OCR анализов нельзя выпускать).
@@ -64,15 +78,16 @@
 
 ## 4. Резолвенные проблемы (для истории)
 
-_(пусто — ещё нет резолвенных проблем)_
+- **2026-05-10 — спринт 1.** Hardcoded RU-строки в `src/bot/handlers/onboarding.py` не обёрнуты в `_()`. Принято решение: на старте RU — `default_locale`, остальные языки приходят к спринту 2 вместе с обёрткой строк через `make i18n-extract` → `make i18n-update` → перевод PL/DE. `.po`-файлы созданы как заглушки. Это не блокер для запуска бота на RU.
+- **2026-05-10 — спринт 1.** В `consent_records` снапшот `version` документа — на момент согласия. Если бампим `CONSENT_VERSIONS["health_data_processing"]` с `1.0` на `2.0` — `has_active_consent` для пользователей со старой версией вернёт `False`, и Censor / приложение запросят повторное согласие. Это намеренное поведение GDPR-compliance.
 
 ## 5. Текущий план спринтов
 
 | Спринт | Недели | Цель | Статус |
 |---|---|---|---|
 | 0 | — | Скаффолдинг репозитория | ✅ done |
-| 1 | 1–2 | Docker Compose, Postgres + pgvector, Alembic init, aiogram `/start`, базовая FSM-структура | ⏭️ next |
-| 2 | 3–4 | Онбординг FSM 5 шагов, GDPR-согласие, таблицы users/profiles/consents | ⏳ |
+| 1 | 1–2 | Docker Compose, Postgres, Alembic, FSM-онбординг 8 шагов (GDPR + 5 этапов), таблицы users/profiles/consents | ✅ done |
+| 2 | 3–4 | i18n-обёртка `_()`, главное меню, `/profile`, soft-delete + ARQ hard-delete воркер, /settings | ⏭️ next |
 | 3 | 5–6 | Сидинг USDA + Open Food Facts, ручной ввод (Haiku) | ⏳ |
 | 4 | 7–8 | Vision Phase 1 (распознавание + редактирование), pHash-кэш | ⏳ |
 | 5 | 9–10 | Vision Phase 2 (chain DB + visual range), кнопки ±10г, daily check-in, Recovery Index | ⏳ |

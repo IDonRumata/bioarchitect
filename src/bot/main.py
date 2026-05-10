@@ -15,7 +15,9 @@ from aiogram.client.default import DefaultBotProperties
 from aiogram.enums import ParseMode
 
 from src.bot.handlers import router as main_router
+from src.bot.middlewares import DBSessionMiddleware, I18nMiddleware
 from src.core.config import get_settings
+from src.core.db.session import get_sessionmaker
 from src.core.logging import configure_logging, get_logger
 from src.core.safety import assert_safe_to_start
 
@@ -33,6 +35,11 @@ async def main() -> None:
         default=DefaultBotProperties(parse_mode=ParseMode.HTML),
     )
     dp = Dispatcher()
+
+    # Middlewares
+    dp.update.middleware(DBSessionMiddleware(get_sessionmaker()))
+    dp.update.middleware(I18nMiddleware())
+
     dp.include_router(main_router)
 
     me = await bot.get_me()
