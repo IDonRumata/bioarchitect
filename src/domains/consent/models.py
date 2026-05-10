@@ -18,6 +18,7 @@ from uuid import UUID
 
 from sqlalchemy import (
     Boolean,
+    DateTime,
     ForeignKey,
     Index,
     String,
@@ -58,7 +59,7 @@ class ConsentRecord(Base, UUIDPrimaryKeyMixin):
     consent_type: Mapped[ConsentType] = mapped_column(consent_type_enum, nullable=False)
     version: Mapped[str] = mapped_column(String(16), nullable=False)
     granted: Mapped[bool] = mapped_column(Boolean, nullable=False)
-    granted_at: Mapped[datetime] = mapped_column(nullable=False)
+    granted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     ip_hash: Mapped[str | None] = mapped_column(String(64), nullable=True)
     user_agent: Mapped[str | None] = mapped_column(String(256), nullable=True)
     notes: Mapped[str | None] = mapped_column(String(512), nullable=True)

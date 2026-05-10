@@ -21,6 +21,7 @@ from uuid import UUID
 from sqlalchemy import (
     BigInteger,
     CheckConstraint,
+    DateTime,
     ForeignKey,
     Index,
     SmallInteger,
@@ -79,8 +80,8 @@ class User(Base, UUIDPrimaryKeyMixin, TimestampMixin):
         nullable=False,
         default=UserStatus.ACTIVE,
     )
-    onboarding_completed_at: Mapped[datetime | None] = mapped_column(nullable=True)
-    deletion_requested_at: Mapped[datetime | None] = mapped_column(nullable=True)
+    onboarding_completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    deletion_requested_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Связи
     profile: Mapped["UserProfile | None"] = relationship(

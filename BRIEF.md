@@ -6,19 +6,15 @@
 
 ## Текущий статус (2026-05-10)
 
-**Спринт:** 2 (главное меню + /profile + /settings + /delete + ARQ-воркер) — **завершён**.
+**Спринт:** 3 — модуль питания — **следующий**.
 
 **Завершено:**
 - Спринт 0 — каркас монорепозитория, 114 файлов, 5 ADR, шаблон DPA.
 - Спринт 1 — модели `users` / `user_profiles` / `consent_records` + первая миграция Alembic, репозитории + сервисы (`UserService`, `ConsentService`), `DBSessionMiddleware` + `I18nMiddleware`, FSM-онбординг 8 шагов (GDPR Art. 9 → 5 этапов из ТЗ §5.1), unit-тесты Pydantic-валидации.
 - Спринт 2 — главное меню (ReplyKeyboardMarkup), хендлеры `/profile` (read-only сводка), `/settings` (переключатель языка), `/delete` (soft-delete с подтверждением + кнопка undo в течение grace period), ARQ-воркер `data_deletion_processor` (cron 03:00 UTC, hard-delete по истечении 30 дней с CASCADE), интеграционные тесты сервисного слоя против реального Postgres (4 кейса в `tests/integration/`), CI расширен на интеграционные тесты.
+- **Локальный стек проверен и работает** (2026-05-10): Docker Desktop установлен, `docker compose up -d` поднимает все 5 сервисов, миграция применена, онбординг FSM пройден до конца в Telegram.
 
 **Следующий шаг:** Спринт 3 — модуль питания: сидинг food_items из USDA + Open Food Facts, ручной ввод текстом «куриная грудка 200г» через Orchestrator (Haiku 4.5) + pg_trgm fuzzy search.
-
-**Перед стартом Спринта 3 нужно от Андрея:**
-1. **Поднять стек локально:** `make dev` → `make migrate` → открыть бота в Telegram, проверить /start, /profile, /settings, /delete, /restore.
-2. (Опционально) Запустить ARQ-воркер вручную, чтобы проверить hard-delete: в `.env` поставить `GDPR_DELETION_GRACE_DAYS=0`, удалить аккаунт, запустить воркер, увидеть что аккаунт исчез.
-3. Если всё ок — переходим в спринт 3.
 
 ---
 
@@ -85,6 +81,7 @@
 - **2026-05-10 — спринт 1.** В `consent_records` снапшот `version` документа — на момент согласия. Если бампим `CONSENT_VERSIONS["health_data_processing"]` с `1.0` на `2.0` — `has_active_consent` для пользователей со старой версией вернёт `False`, и Censor / приложение запросят повторное согласие. Это намеренное поведение GDPR-compliance.
 - **2026-05-10 — спринт 2.** Полный i18n-проход откладывается, см. таблицу решений. RU остаётся master-языком до подключения переводчиков. `LOCALE_LABELS` уже умеют все 4 языка, переключение в `/settings` сохраняется в БД, но влияет только на новые `_()`-обёрнутые сообщения (которые появятся в спринтах 6+).
 - **2026-05-10 — спринт 2.** Тестовая БД для интеграционных тестов = `bioarchitect_test`. CI создаёт её через service container с такими же кредами как dev. Локально нужно создать вручную: `docker compose exec postgres createdb -U bioarchitect bioarchitect_test`.
+- **2026-05-10 — локальный запуск.** Исправлены баги при первом запуске: (1) `SUPPORTED_LOCALES` в `.env` должен быть в JSON-формате `["ru","en","pl","de"]`; (2) `structlog.stdlib.add_logger_name` убран из процессоров (несовместим с `PrintLoggerFactory`); (3) все `DateTime()` колонки переведены на `DateTime(timezone=True)` — иначе asyncpg падал с "can't subtract offset-naive and offset-aware datetimes"; (4) `alembic.ini` добавлен в volumes бота в `docker-compose.yml`; (5) `README.md` добавлен в Dockerfile `dev` и `builder` стадии (hatchling требует его при сборке пакета).
 
 ## 5. Текущий план спринтов
 

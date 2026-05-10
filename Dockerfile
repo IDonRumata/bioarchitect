@@ -55,6 +55,7 @@ ENV PATH="/app/.venv/bin:$PATH"
 
 # ---------- Этап 3: builder ----------
 FROM deps AS builder
+COPY README.md ./
 COPY src ./src
 COPY alembic ./alembic
 COPY alembic.ini ./
@@ -69,6 +70,7 @@ FROM base AS dev
 COPY --from=deps /app/.venv /app/.venv
 COPY pyproject.toml ./
 COPY uv.lock* ./
+COPY README.md ./
 
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --all-extras || uv sync --all-extras
