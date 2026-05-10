@@ -62,6 +62,13 @@ jobs:
           TELEGRAM_BOT_TOKEN: dummy
           ANTHROPIC_API_KEY: dummy
         run: uv run pytest -m unit --cov=src --cov-report=xml
+      - name: Run integration tests
+        env:
+          DATABASE_URL: postgresql+asyncpg://bioarchitect:bioarchitect@localhost:5432/bioarchitect_test
+          REDIS_URL: redis://localhost:6379/0
+          TELEGRAM_BOT_TOKEN: dummy
+          ANTHROPIC_API_KEY: dummy
+        run: uv run pytest -m integration --cov=src --cov-append --cov-report=xml
 
   censor-eval:
     name: Censor Agent eval suite (CI gate)
