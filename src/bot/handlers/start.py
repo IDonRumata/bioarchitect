@@ -1,7 +1,8 @@
 """``/start`` — точка входа в бота.
 
 - Если пользователь не существует или не завершил онбординг → запускаем FSM.
-- Если онбординг завершён → показываем главное меню (TODO sprint 2: меню).
+- Если онбординг завершён → показываем главное меню.
+- Если пользователь в `PENDING_DELETION` — предлагаем undo (grace period).
 """
 
 from __future__ import annotations
@@ -15,6 +16,9 @@ from aiogram.types import Message
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.bot.handlers.onboarding import begin_onboarding
+from src.bot.keyboards.main_menu import main_menu_keyboard
+from src.bot.keyboards.settings import deletion_undo_keyboard
+from src.domains.users.enums import UserStatus
 from src.domains.users.service import UserService
 
 router = Router(name="start")
@@ -33,6 +37,17 @@ async def cmd_start(
         username=message.from_user.username,
     )
 
+    # Особый случай: пользователь запросил удаление, grace period не истёк.
+    if user.status == UserStatus.PENDING_DELETION:
+        await state.clear()
+        await message.answer(
+            "🕒 <b>Удаление аккаунта запланировано.</b>\n\n"
+            "Все твои данные будут удалены навсегда после 30-дневного "
+            "периода ожидания. Если передумал — нажми кнопку ниже.",
+            reply_markup=deletion_undo_keyboard(),
+        )
+        return
+
     if created or user.onboarding_completed_at is None:
         await message.answer(
             "👋 <b>Привет!</b>\n\n"
@@ -48,6 +63,7 @@ async def cmd_start(
     await state.clear()
     await message.answer(
         "С возвращением! 👋\n\n"
-        "Отправь фото еды, напиши «куриная грудка 200г», или /help — "
-        "все команды."
+        "Отправь фото еды, напиши «куриная грудка 200г», или нажми кнопку "
+        "из меню ниже.",
+        reply_markup=main_menu_keyboard(),
     )

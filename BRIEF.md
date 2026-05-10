@@ -6,20 +6,19 @@
 
 ## Текущий статус (2026-05-10)
 
-**Спринт:** 1 (онбординг + GDPR-согласие) — **завершён**.
+**Спринт:** 2 (главное меню + /profile + /settings + /delete + ARQ-воркер) — **завершён**.
 
 **Завершено:**
 - Спринт 0 — каркас монорепозитория, 114 файлов, 5 ADR, шаблон DPA.
-- Спринт 1 — модели `users` / `user_profiles` / `consent_records` + первая миграция Alembic, репозитории + сервисы (`UserService`, `ConsentService`), `DBSessionMiddleware` + `I18nMiddleware`, FSM-онбординг 8 шагов (GDPR Art. 9 → 5 этапов из ТЗ §5.1), 4 `.po`-файла локалей (заглушки), unit-тесты Pydantic-валидации payload + версии согласий + smoke-импорт всех модулей.
+- Спринт 1 — модели `users` / `user_profiles` / `consent_records` + первая миграция Alembic, репозитории + сервисы (`UserService`, `ConsentService`), `DBSessionMiddleware` + `I18nMiddleware`, FSM-онбординг 8 шагов (GDPR Art. 9 → 5 этапов из ТЗ §5.1), unit-тесты Pydantic-валидации.
+- Спринт 2 — главное меню (ReplyKeyboardMarkup), хендлеры `/profile` (read-only сводка), `/settings` (переключатель языка), `/delete` (soft-delete с подтверждением + кнопка undo в течение grace period), ARQ-воркер `data_deletion_processor` (cron 03:00 UTC, hard-delete по истечении 30 дней с CASCADE), интеграционные тесты сервисного слоя против реального Postgres (4 кейса в `tests/integration/`), CI расширен на интеграционные тесты.
 
-**Следующий шаг:** Спринт 2 — обёртка handler-строк в `_()` (gettext flow), главное меню, команда `/profile`, soft-delete handler, ARQ воркер `data_deletion_processor` для hard-delete после grace period 30 дней.
+**Следующий шаг:** Спринт 3 — модуль питания: сидинг food_items из USDA + Open Food Facts, ручной ввод текстом «куриная грудка 200г» через Orchestrator (Haiku 4.5) + pg_trgm fuzzy search.
 
-**Перед стартом Спринта 2 нужно от Андрея:**
-1. Установить Docker Desktop + uv, склонировать репо, создать `.env` (см. `docs/setup/local-development.md`).
-2. Запустить `make dev` — убедиться что postgres + redis + bot + api поднимаются.
-3. Запустить `make migrate` — должна применится миграция `20260509_1200_initial_schema`.
-4. Открыть бота в Telegram → `/start` → пройти онбординг — убедиться что вся FSM работает end-to-end.
-5. Если всё ок — переходим в спринт 2.
+**Перед стартом Спринта 3 нужно от Андрея:**
+1. **Поднять стек локально:** `make dev` → `make migrate` → открыть бота в Telegram, проверить /start, /profile, /settings, /delete, /restore.
+2. (Опционально) Запустить ARQ-воркер вручную, чтобы проверить hard-delete: в `.env` поставить `GDPR_DELETION_GRACE_DAYS=0`, удалить аккаунт, запустить воркер, увидеть что аккаунт исчез.
+3. Если всё ок — переходим в спринт 3.
 
 ---
 
@@ -59,6 +58,10 @@
 | 2026-05-10 | `birth_year` вместо полной даты (GDPR Data Minimization). Минимум 18+ через CHECK constraint и валидацию FSM. | соответствует ТЗ §5.1 + Censor blocklist (н/л запрещены) |
 | 2026-05-10 | Pattern: append-only `consent_records`. Отзыв = новая строка `granted=false`. Никаких UPDATE. | GDPR audit trail требует полную историю |
 | 2026-05-10 | IP в `consent_records` хранится как sha256 хеш с солью, а не raw. | Data Minimization, но достаточно для proof-of-consent |
+| 2026-05-10 | Полный i18n-проход (`_()` обёртка handler-строк) **отложен** до подключения переводчиков PL/DE (спринт 6+). До этого RU = master, английский остаётся хардкодом. `.po` создаются при первом проходе через `make i18n-extract`. | Преждевременная локализация — anti-pattern, нужны живые переводчики |
+| 2026-05-10 | Hard-delete пользователей — через CASCADE на FK (ON DELETE CASCADE стоит на user_profiles, consent_records и т.д.). ARQ-воркер делает `DELETE FROM users WHERE id IN (...)`. | Один источник правды (БД), нет ручной разборки таблиц в коде |
+| 2026-05-10 | Grace period конфигурируется через `GDPR_DELETION_GRACE_DAYS` в .env (по умолчанию 30). Для тестирования ставится 0. | гибкость для CI / staging |
+| 2026-05-10 | Интеграционные тесты идут через реальный Postgres (CI service container или локальный `make dev` БД). aiosqlite-fallback не используется — модели завязаны на postgres-специфику (UUID, ENUM, ARRAY). | Faithful tests > быстрые in-memory |
 
 ## 3. Блокеры и open questions
 
@@ -80,6 +83,8 @@
 
 - **2026-05-10 — спринт 1.** Hardcoded RU-строки в `src/bot/handlers/onboarding.py` не обёрнуты в `_()`. Принято решение: на старте RU — `default_locale`, остальные языки приходят к спринту 2 вместе с обёрткой строк через `make i18n-extract` → `make i18n-update` → перевод PL/DE. `.po`-файлы созданы как заглушки. Это не блокер для запуска бота на RU.
 - **2026-05-10 — спринт 1.** В `consent_records` снапшот `version` документа — на момент согласия. Если бампим `CONSENT_VERSIONS["health_data_processing"]` с `1.0` на `2.0` — `has_active_consent` для пользователей со старой версией вернёт `False`, и Censor / приложение запросят повторное согласие. Это намеренное поведение GDPR-compliance.
+- **2026-05-10 — спринт 2.** Полный i18n-проход откладывается, см. таблицу решений. RU остаётся master-языком до подключения переводчиков. `LOCALE_LABELS` уже умеют все 4 языка, переключение в `/settings` сохраняется в БД, но влияет только на новые `_()`-обёрнутые сообщения (которые появятся в спринтах 6+).
+- **2026-05-10 — спринт 2.** Тестовая БД для интеграционных тестов = `bioarchitect_test`. CI создаёт её через service container с такими же кредами как dev. Локально нужно создать вручную: `docker compose exec postgres createdb -U bioarchitect bioarchitect_test`.
 
 ## 5. Текущий план спринтов
 
@@ -87,7 +92,8 @@
 |---|---|---|---|
 | 0 | — | Скаффолдинг репозитория | ✅ done |
 | 1 | 1–2 | Docker Compose, Postgres, Alembic, FSM-онбординг 8 шагов (GDPR + 5 этапов), таблицы users/profiles/consents | ✅ done |
-| 2 | 3–4 | i18n-обёртка `_()`, главное меню, `/profile`, soft-delete + ARQ hard-delete воркер, /settings | ⏭️ next |
+| 2 | 3–4 | главное меню, `/profile`, `/settings`, soft-delete + ARQ hard-delete воркер, integration tests | ✅ done |
+| 3 | 5–6 | Сидинг USDA + Open Food Facts, ручной ввод (Haiku 4.5) через Orchestrator, pg_trgm fuzzy search | ⏭️ next |
 | 3 | 5–6 | Сидинг USDA + Open Food Facts, ручной ввод (Haiku) | ⏳ |
 | 4 | 7–8 | Vision Phase 1 (распознавание + редактирование), pHash-кэш | ⏳ |
 | 5 | 9–10 | Vision Phase 2 (chain DB + visual range), кнопки ±10г, daily check-in, Recovery Index | ⏳ |
