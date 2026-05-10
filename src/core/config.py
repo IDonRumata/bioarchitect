@@ -11,7 +11,7 @@ from __future__ import annotations
 
 from enum import StrEnum
 from functools import lru_cache
-from typing import Annotated, Literal
+from typing import Literal
 
 from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -50,6 +50,11 @@ class Settings(BaseSettings):
     anthropic_model_haiku: str = "claude-haiku-4-5"
     anthropic_model_sonnet: str = "claude-sonnet-4-6"
     anthropic_prompt_cache: bool = True
+
+    # --- USDA FoodData Central (только сидер scripts/seed_food_items.py) ---
+    # Бесплатный ключ: https://fdc.nal.usda.gov/api-key-signup.html
+    # Если пусто — сидер пропускает USDA и работает с manual + OFF.
+    usda_fdc_api_key: SecretStr = SecretStr("")
 
     # --- БД ---
     postgres_host: str = "postgres"
@@ -101,7 +106,7 @@ class Settings(BaseSettings):
 
     # --- Локализация ---
     default_locale: Literal["ru", "en", "pl", "de"] = "ru"
-    supported_locales: Annotated[list[str], Field(default_factory=lambda: ["ru", "en", "pl", "de"])]
+    supported_locales: list[str] = Field(default_factory=lambda: ["ru", "en", "pl", "de"])
 
     # --- Censor ---
     censor_enabled: bool = True
