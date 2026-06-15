@@ -1,76 +1,38 @@
 # BioArchitect
 
-**AI Wellness Companion for Drivers & Shift Workers**
+[![Python 3.12+](https://img.shields.io/badge/Python-3.12+-3776ab?logo=python&logoColor=white)](https://www.python.org/)
+[![Telegram Bot](https://img.shields.io/badge/Telegram-Wellness%20Bot-0088cc?logo=telegram)](https://core.telegram.org/bots/api)
+[![React](https://img.shields.io/badge/React-Mini%20App-61DAFB?logo=react&logoColor=black)](https://react.dev/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED?logo=docker&logoColor=white)](https://www.docker.com/)
 
-Персональный AI-ассистент по питанию, лабораторным показателям и дневнику самочувствия. Работает на смартфоне (Telegram → Mini App → PWA → Android APK), без специального железа. Адаптирован для дальнобойщиков EU/СНГ и вахтовых работников.
+**BioArchitect** — AI wellness-компаньон для водителей и вахтовых работников. Отслеживает питание, анализы крови, сон и самочувствие. Работает через Telegram (доступен везде) и Telegram Mini App (интерактивные калькуляторы).
 
-> **Правовой статус:** Wellness-сервис и образовательный справочник. Не является медицинским устройством (EU MDR Art. 2(1) intended-purpose exemption). Не интерпретирует личные медицинские данные.
+**Целевая аудитория:** Дальнобойщики EU/СНГ, вахтовики  
+**Платформы:** Telegram Bot + Telegram Mini App (React) + PWA + Android APK  
+**Регулирование:** Wellness-сервис, не медицинское устройство (EU MDR compliant)
 
-## Roadmap платформ
+## ✨ Ключевые возможности
 
-| Канал | Срок | Технология |
-|---|---|---|
-| Telegram Bot | Месяц 1 | aiogram 3.x |
-| Telegram Mini App | Месяц 2 | React + Vite + WebApp SDK |
-| PWA | Месяц 3 | React + manifest |
-| Android APK | Месяц 4 | Capacitor.js |
-| Google Play / App Store | Месяц 6+ | Capacitor bundle |
+- 📊 **Дневник здоровья** — логирование питания, давления, веса, сна
+- 🔬 **Анализ крови** — OCR интерпретация результатов (КБЖУ, витамины)
+- 🍽️ **База КБЖУ** — 100+ заправок EU/СНГ (Aral, Orlen, Shell, Lidl)
+- 📱 **Telegram Mini Apps** — встроенные калькуляторы (инвест, здоровье)
+- 📈 **Статистика** — тренды за месяц/полгода
+- 💊 **Лекарства & Добавки** — напоминания, взаимодействия
+- 🆓 **Free + Pro модель** — подписка $79/год на расширенные функции
 
-## Ключевые конкурентные преимущества
-
-- В 2.5–4.5× дешевле Whoop / Fitbit Air
-- Работает на смартфоне, который уже есть (без железа)
-- Единственная база КБЖУ заправок EU/СНГ (100+ сетей: Aral, Orlen, Shell, McDonald's, Lidl…)
-- OCR анализов крови (отсутствует у конкурентов)
-- Telegram-first: работает в РФ/BY/KZ без Google/Apple
-- GDPR-compliant: удаление одной кнопкой, серверы только в EU
-
-## Тарифы
-
-| Тариф | Цена | Vision/день | OCR/мес | LLM запросов/день |
-|---|---|---|---|---|
-| FREE | $0 | 1 | — | 5 |
-| PRO | $79/год | 15 | 5 | 50 |
-| PRO+ | $149/год | 30 | 20 | 150 |
-| FLEET (B2B) | $5/водитель/мес | 15 | 5 | 50 |
-
-## Технологический стек
-
-- **Backend:** Python 3.12 + aiogram 3 + FastAPI + SQLAlchemy 2 + Alembic
-- **БД:** PostgreSQL 16 + pgvector + pg_partman
-- **Кэш / очереди:** Redis 7 + ARQ
-- **LLM:** Anthropic Claude (Haiku 4.5 + Sonnet 4.6) с Prompt Caching
-- **Frontend:** React + TypeScript + Vite + Tailwind + Capacitor.js
-- **Контейнеры:** Docker Compose + Traefik v3
-- **Мониторинг:** Sentry + Prometheus + Grafana + Loki
-- **Платежи:** Telegram Stars + Stripe + ЮKassa
-- **Secrets:** sops + age (планируется)
-
-> Запрещено в проекте: LangChain / LangGraph / CrewAI, OpenAI API, Supabase, Kubernetes, AdMob, Pinecone / Qdrant.
-
-## Документация
-
-- [`CLAUDE.md`](CLAUDE.md) — системный промпт для Claude Code
-- [`BRIEF.md`](BRIEF.md) — текущий статус проекта (источник истины между сессиями)
-- [`docs/TZ.md`](docs/TZ.md) — полное техзадание v1.2
-- [`docs/architecture-decisions/`](docs/architecture-decisions/) — ADR-файлы
-
-## Разработка
+## 🚀 Быстрый старт
 
 ```bash
-# Локальная разработка
-make dev                # запустить postgres + redis + bot + api в Docker
-make migrate            # применить миграции БД
-make test               # unit-тесты
-make eval               # eval suite Censor Agent (CI gate)
-make lint               # ruff + mypy
-make seed               # засеять USDA + Open Food Facts + base chains
+git clone https://github.com/IDonRumata/bioarchitect.git
+cd bioarchitect
+docker compose up -d
 ```
 
-## Структура репозитория
+## 📞 Контакты
 
-См. [`docs/architecture-decisions/0001-monorepo-layout.md`](docs/architecture-decisions/0001-monorepo-layout.md) и Приложение А ТЗ.
+- **Telegram:** [@DonRumataE](https://t.me/DonRumataE)
 
-## Лицензия
+---
 
-Proprietary. © 2026 BioArchitect. Все права защищены.
+*Wellness для профессионалов. Здоровье — главный актив.*
